@@ -155,8 +155,7 @@ static void usage(card_mode_t mode, bool print_all)
     //         "...............................................................................\n"
     pageprintf("Bluetooth settings:\n");
     pageprintf("   /btinit        - initialize Bluetooth subsystem\n");
-    pageprintf("   /btscan        - start scanning for Bluetooth devices\n");
-    pageprintf("   /btstop        - stop Bluetooth scanning\n");
+    pageprintf("   /btscan        - start scanning for Bluetooth devices (auto-stops after 10s)\n");
     pageprintf("   /btpair addr   - pair with device at address (e.g., 00:11:22:33:44:55)\n");
     pageprintf("   /btunpair addr - unpair device at address\n");
     pageprintf("   /btconnect addr- connect to A2DP device at address\n");
@@ -865,12 +864,7 @@ static bool cmdBTScan(const char* arg, const int cmd)
     return true;
 }
 
-static bool cmdBTStop(const char* arg, const int cmd)
-{
-    printf("Stopping Bluetooth scan...\n");
-    outp(CONTROL_PORT, cmd);
-    return true;
-}
+
 
 static bool cmdBTPair(const char* arg, const int cmd)
 {
@@ -1002,7 +996,6 @@ ParseCommand parseCommands[] = {
     {"/psgvol", cmdSetVol, CMD_PSGVOL, ARG_REQUIRE, "100"},
     {"/btinit", cmdBTInit, CMD_BT_INIT, ARG_NONE},
     {"/btscan", cmdBTScan, CMD_BT_SCAN, ARG_NONE},
-    {"/btstop", cmdBTStop, CMD_BT_STOP, ARG_NONE},
     {"/btpair", cmdBTPair, CMD_BT_PAIR, ARG_REQUIRE},
     {"/btunpair", cmdBTUnpair, CMD_BT_UNPAIR, ARG_REQUIRE},
     {"/btconnect", cmdBTConnect, CMD_BT_CONNECT, ARG_REQUIRE},
