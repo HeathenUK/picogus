@@ -36,9 +36,11 @@
 #include "opl.h"
 
 #include "audio/audio_fifo.h"
-#if SOUND_SB
+// Bluetooth audio system (PicoW only)
+#ifdef PICOW
+#include "bluetooth_audio.h"
+#endif
 #include "sbdsp/sbdsp.h"
-#endif // SOUND_SB
 #if defined(SOUND_SB) || defined(USB_MOUSE) || defined(SOUND_MPU)
 #include "system/pico_pic.h"
 #endif
@@ -155,6 +157,13 @@ void audio_sample_handler(void) {
         clamp16(sample_l),
         clamp16(sample_r)
     }};
+    
+    // Process audio for Bluetooth output (PicoW only)
+#ifdef PICOW
+    int16_t bt_samples[2] = {clamped.data16[0], clamped.data16[1]};
+    bt_audio_process_audio(bt_samples, 1, 44100);
+#endif
+    
     audio_pio->txf[PICO_AUDIO_I2S_SM] = clamped.data32;
 }
 
