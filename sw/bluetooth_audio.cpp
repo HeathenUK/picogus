@@ -22,10 +22,11 @@
 #include <cstring>
 
 #ifdef PICOW
-// Simplified Bluetooth audio implementation for PicoW
-// This provides the interface for audio routing without full BTstack
 
-// Global Bluetooth audio configuration
+#include "btstack.h"
+#include "btstack_config.h"
+
+// Bluetooth audio configuration
 static bt_audio_config_t bt_config = {
     .volume = 50,
     .enabled = false,
@@ -33,37 +34,102 @@ static bt_audio_config_t bt_config = {
     .connected_device = {0}
 };
 
-// Audio buffer for A2DP streaming
-static int16_t bt_audio_buffer[1024];  // 2 seconds at 44.1kHz stereo
-static uint32_t bt_audio_buffer_pos = 0;
-static bool bt_audio_streaming = false;
+// BTstack state management
+static bool btstack_initialized = false;
+static bool inquiry_active = false;
+static uint16_t a2dp_cid = 0;
+static uint16_t avrcp_cid = 0;
+static uint8_t local_seid = 0;
+static uint8_t remote_seid = 0;
+static bool stream_opened = false;
+static bool streaming = false;
 
-// Initialize Bluetooth audio system
+// Device discovery
+#define MAX_DISCOVERED_DEVICES 20
+static bt_device_t discovered_devices[MAX_DISCOVERED_DEVICES];
+static int discovered_device_count = 0;
+
+// Audio streaming
+static int16_t audio_buffer[1024];  // 2 seconds at 44.1kHz stereo
+static uint32_t audio_buffer_pos = 0;
+static uint32_t rtp_timestamp = 0;
+
+// SBC encoder for A2DP
+static const btstack_sbc_encoder_t *sbc_encoder_instance;
+static btstack_sbc_encoder_bluedroid_t sbc_encoder_state;
+static uint8_t sbc_storage[1030];
+static uint16_t sbc_storage_count = 0;
+static bool sbc_ready_to_send = false;
+
+// Audio timer for streaming
+static btstack_timer_source_t audio_timer;
+
+// Callback registration
+static btstack_packet_callback_registration_t hci_event_callback_registration;
+
+// Forward declarations
+static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
+static void audio_timer_handler(btstack_timer_source_t *ts);
+static void start_audio_streaming(void);
+static void stop_audio_streaming(void);
+
+// Initialize BTstack and Bluetooth audio system
 void bt_audio_init(void) {
-    if (!bt_config.enabled) {
-        printf("BT: Initializing simplified Bluetooth audio...\n");
-        
-        // For now, just mark as enabled
-        // In a real implementation, this would initialize the Bluetooth hardware
-        bt_config.enabled = true;
-        bt_config.state = BT_AUDIO_DISCONNECTED;
-        printf("BT: Simplified Bluetooth audio initialized (no actual BT hardware)\n");
+    if (btstack_initialized) {
+        printf("BT: Already initialized\n");
+        return;
     }
+
+    printf("BT: Initializing BTstack...\n");
+    
+    // Initialize BTstack
+    l2cap_init();
+    sdp_init();
+    avdtp_source_init();
+    avrcp_init();
+    gap_init();
+    sm_init();
+    
+    // Register for HCI events
+    hci_event_callback_registration.callback = &packet_handler;
+    hci_add_event_handler(&hci_event_callback_registration);
+    
+    // Initialize SBC encoder
+    sbc_encoder_instance = btstack_sbc_encoder_bluedroid_init_instance();
+    btstack_sbc_encoder_bluedroid_init(&sbc_encoder_state, sbc_encoder_instance);
+    
+    // Set up audio timer
+    audio_timer.process = &audio_timer_handler;
+    
+    btstack_initialized = true;
+    bt_config.enabled = true;
+    bt_config.state = BT_AUDIO_DISCONNECTED;
+    
+    printf("BT: BTstack initialized successfully\n");
 }
 
 // Deinitialize Bluetooth audio system
 void bt_audio_deinit(void) {
-    if (bt_config.enabled) {
-        printf("BT: Deinitializing Bluetooth audio...\n");
-        
-        if (bt_audio_is_connected()) {
-            bt_audio_disconnect_device();
-        }
-        
-        bt_config.enabled = false;
-        bt_config.state = BT_AUDIO_DISCONNECTED;
-        printf("BT: Bluetooth audio deinitialized\n");
+    if (!btstack_initialized) {
+        return;
     }
+
+    printf("BT: Deinitializing Bluetooth audio...\n");
+    
+    if (bt_audio_is_connected()) {
+        bt_audio_disconnect_device();
+    }
+    
+    if (inquiry_active) {
+        gap_inquiry_stop();
+        inquiry_active = false;
+    }
+    
+    btstack_initialized = false;
+    bt_config.enabled = false;
+    bt_config.state = BT_AUDIO_DISCONNECTED;
+    
+    printf("BT: Bluetooth audio deinitialized\n");
 }
 
 // Check if Bluetooth audio is connected
@@ -101,96 +167,129 @@ void bt_audio_process_audio(int16_t *samples, uint32_t sample_count, uint32_t sa
     }
 
     // Buffer audio for A2DP streaming
-    if (bt_audio_streaming && bt_config.state == BT_AUDIO_STREAMING) {
+    if (streaming && bt_config.state == BT_AUDIO_STREAMING) {
         uint32_t samples_to_copy = sample_count * 2;  // Stereo samples
-        if (bt_audio_buffer_pos + samples_to_copy <= sizeof(bt_audio_buffer) / sizeof(int16_t)) {
-            memcpy(&bt_audio_buffer[bt_audio_buffer_pos], samples, samples_to_copy * sizeof(int16_t));
-            bt_audio_buffer_pos += samples_to_copy;
+        if (audio_buffer_pos + samples_to_copy <= sizeof(audio_buffer) / sizeof(int16_t)) {
+            memcpy(&audio_buffer[audio_buffer_pos], samples, samples_to_copy * sizeof(int16_t));
+            audio_buffer_pos += samples_to_copy;
         }
     }
 }
 
 // Start A2DP streaming
 void bt_audio_start_streaming(void) {
-    if (bt_config.enabled && bt_config.state == BT_AUDIO_CONNECTED) {
+    if (bt_config.enabled && bt_config.state == BT_AUDIO_CONNECTED && stream_opened) {
         printf("BT: Starting A2DP streaming\n");
-        bt_audio_streaming = true;
-        bt_audio_buffer_pos = 0;
-        bt_config.state = BT_AUDIO_STREAMING;
+        start_audio_streaming();
     }
 }
 
 // Stop A2DP streaming
 void bt_audio_stop_streaming(void) {
-    if (bt_audio_streaming) {
+    if (streaming) {
         printf("BT: Stopping A2DP streaming\n");
-        bt_audio_streaming = false;
-        bt_audio_buffer_pos = 0;
-        if (bt_config.state == BT_AUDIO_STREAMING) {
-            bt_config.state = BT_AUDIO_CONNECTED;
-        }
+        stop_audio_streaming();
     }
 }
 
 // Start Bluetooth device scanning
 bool bt_audio_scan_start(void) {
-    if (!bt_config.enabled) {
+    if (!btstack_initialized) {
         printf("BT: Bluetooth not initialized\n");
         return false;
     }
 
-    printf("BT: Starting device scan (simulated)...\n");
-    printf("BT: Found device 00:11:22:33:44:55 (Test Headphones)\n");
+    if (inquiry_active) {
+        printf("BT: Scan already active\n");
+        return true;
+    }
+
+    printf("BT: Starting device scan...\n");
+    
+    // Clear previous discoveries
+    discovered_device_count = 0;
+    memset(discovered_devices, 0, sizeof(discovered_devices));
+    
+    // Start inquiry
+    gap_inquiry_start(5);  // 5 * 1.28s = 6.4s inquiry
+    inquiry_active = true;
+    
     return true;
 }
 
 // Stop Bluetooth device scanning
 bool bt_audio_scan_stop(void) {
+    if (!inquiry_active) {
+        return true;
+    }
+
     printf("BT: Stopping device scan\n");
+    gap_inquiry_stop();
+    inquiry_active = false;
     return true;
 }
 
 // Pair with a Bluetooth device
 bool bt_audio_pair_device(const char *address) {
-    if (!bt_config.enabled) {
+    if (!btstack_initialized) {
         printf("BT: Bluetooth not initialized\n");
         return false;
     }
 
-    printf("BT: Pairing with device %s (simulated)\n", address);
-    strcpy(bt_config.connected_device.address, address);
-    strcpy(bt_config.connected_device.name, "Test Headphones");
-    bt_config.connected_device.paired = true;
-    bt_config.connected_device.connected = false;
+    printf("BT: Pairing with device %s\n", address);
+    
+    bd_addr_t addr;
+    sscanf_bd_addr(address, addr);
+    
+    // Start pairing process
+    sm_request_pairing(addr);
+    
     return true;
 }
 
 // Unpair a Bluetooth device
 bool bt_audio_unpair_device(const char *address) {
-    if (!bt_config.enabled) {
+    if (!btstack_initialized) {
         printf("BT: Bluetooth not initialized\n");
         return false;
     }
 
-    printf("BT: Unpairing device %s (simulated)\n", address);
+    printf("BT: Unpairing device %s\n", address);
+    
+    bd_addr_t addr;
+    sscanf_bd_addr(address, addr);
+    
+    // Remove link key
+    sm_delete_link_key(addr);
+    
+    // Clear from connected device if it matches
     if (strcmp(bt_config.connected_device.address, address) == 0) {
         memset(&bt_config.connected_device, 0, sizeof(bt_device_t));
     }
+    
     return true;
 }
 
 // Connect to a Bluetooth device
 bool bt_audio_connect_device(const char *address) {
-    if (!bt_config.enabled) {
+    if (!btstack_initialized) {
         printf("BT: Bluetooth not initialized\n");
         return false;
     }
 
-    printf("BT: Connecting to device %s (simulated)\n", address);
+    printf("BT: Connecting to device %s\n", address);
+    
+    bd_addr_t addr;
+    sscanf_bd_addr(address, addr);
+    
+    // Store device info
     strcpy(bt_config.connected_device.address, address);
-    strcpy(bt_config.connected_device.name, "Test Headphones");
-    bt_config.connected_device.connected = true;
-    bt_config.state = BT_AUDIO_CONNECTED;
+    bt_config.connected_device.connected = false;
+    bt_config.state = BT_AUDIO_CONNECTING;
+    
+    // Start A2DP connection
+    a2dp_source_establish_stream(addr, &a2dp_cid);
+    
     return true;
 }
 
@@ -200,20 +299,194 @@ bool bt_audio_disconnect_device(void) {
         return false;
     }
 
-    printf("BT: Disconnecting from device (simulated)\n");
+    printf("BT: Disconnecting from device\n");
+    
+    if (streaming) {
+        stop_audio_streaming();
+    }
+    
+    if (a2dp_cid) {
+        a2dp_source_disconnect(a2dp_cid);
+        a2dp_cid = 0;
+    }
+    
+    if (avrcp_cid) {
+        avrcp_disconnect(avrcp_cid);
+        avrcp_cid = 0;
+    }
+    
     bt_config.state = BT_AUDIO_DISCONNECTED;
     bt_config.connected_device.connected = false;
-    bt_audio_stop_streaming();
+    stream_opened = false;
+    
     return true;
 }
 
 // Get list of paired devices
 int bt_audio_get_paired_devices(bt_device_t *devices, int max_devices) {
-    if (bt_config.connected_device.paired && max_devices > 0) {
-        devices[0] = bt_config.connected_device;
-        return 1;
+    if (!btstack_initialized) {
+        return 0;
     }
-    return 0;
+
+    // For now, return the connected device if it exists
+    int count = 0;
+    if (bt_config.connected_device.paired && count < max_devices) {
+        devices[count] = bt_config.connected_device;
+        count++;
+    }
+    
+    return count;
+}
+
+// Audio timer handler for streaming
+static void audio_timer_handler(btstack_timer_source_t *ts) {
+    if (!streaming || !stream_opened) {
+        return;
+    }
+    
+    // Process audio buffer and send via A2DP
+    if (audio_buffer_pos > 0 && sbc_ready_to_send) {
+        // Encode audio data with SBC
+        int bytes_encoded = btstack_sbc_encoder_bluedroid_encode_signed_16(&sbc_encoder_state, 
+                                                                          audio_buffer, 
+                                                                          audio_buffer_pos / 2,  // Convert to mono samples
+                                                                          sbc_storage, 
+                                                                          sizeof(sbc_storage));
+        
+        if (bytes_encoded > 0) {
+            // Send encoded audio data
+            avdtp_source_stream_send_media_packet(a2dp_cid, local_seid, 
+                                                 sbc_storage, bytes_encoded, 
+                                                 rtp_timestamp);
+            rtp_timestamp += audio_buffer_pos / 2;  // Increment timestamp
+        }
+        
+        // Reset buffer
+        audio_buffer_pos = 0;
+    }
+    
+    // Schedule next audio timer
+    btstack_run_loop_set_timer(ts, 10);  // 10ms intervals
+    btstack_run_loop_add_timer(ts);
+}
+
+// Start audio streaming
+static void start_audio_streaming(void) {
+    if (!stream_opened) {
+        return;
+    }
+    
+    streaming = true;
+    audio_buffer_pos = 0;
+    rtp_timestamp = 0;
+    bt_config.state = BT_AUDIO_STREAMING;
+    
+    // Start audio timer
+    btstack_run_loop_set_timer(&audio_timer, 10);
+    btstack_run_loop_add_timer(&audio_timer);
+    
+    printf("BT: Audio streaming started\n");
+}
+
+// Stop audio streaming
+static void stop_audio_streaming(void) {
+    streaming = false;
+    btstack_run_loop_remove_timer(&audio_timer);
+    
+    if (bt_config.state == BT_AUDIO_STREAMING) {
+        bt_config.state = BT_AUDIO_CONNECTED;
+    }
+    
+    printf("BT: Audio streaming stopped\n");
+}
+
+// Main packet handler for all Bluetooth events
+static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
+    UNUSED(channel);
+    UNUSED(size);
+    
+    if (packet_type != HCI_EVENT_PACKET) {
+        return;
+    }
+    
+    switch (hci_event_packet_get_type(packet)) {
+        case HCI_EVENT_DISCONNECTION_COMPLETE:
+            printf("BT: Disconnected\n");
+            bt_config.state = BT_AUDIO_DISCONNECTED;
+            bt_config.connected_device.connected = false;
+            stream_opened = false;
+            streaming = false;
+            break;
+            
+        case GAP_EVENT_INQUIRY_RESULT:
+            if (discovered_device_count < MAX_DISCOVERED_DEVICES) {
+                gap_event_inquiry_result_get_bd_addr(packet, discovered_devices[discovered_device_count].address);
+                gap_event_inquiry_result_get_name(packet, discovered_devices[discovered_device_count].name);
+                discovered_devices[discovered_device_count].paired = false;
+                discovered_devices[discovered_device_count].connected = false;
+                discovered_device_count++;
+                printf("BT: Found device %s (%s)\n", 
+                       discovered_devices[discovered_device_count-1].address,
+                       discovered_devices[discovered_device_count-1].name);
+            }
+            break;
+            
+        case GAP_EVENT_INQUIRY_COMPLETE:
+            printf("BT: Device scan completed, found %d devices\n", discovered_device_count);
+            inquiry_active = false;
+            break;
+            
+        case AVDTP_EVENT_SIGNALING_CONNECTION_ESTABLISHED:
+            printf("BT: AVDTP connection established\n");
+            a2dp_cid = avdtp_event_signaling_connection_established_get_avdtp_cid(packet);
+            break;
+            
+        case AVDTP_EVENT_SIGNALING_CONNECTION_RELEASED:
+            printf("BT: AVDTP connection released\n");
+            a2dp_cid = 0;
+            stream_opened = false;
+            break;
+            
+        case AVDTP_EVENT_STREAM_ESTABLISHED:
+            printf("BT: A2DP stream established\n");
+            local_seid = avdtp_event_stream_established_get_local_seid(packet);
+            remote_seid = avdtp_event_stream_established_get_remote_seid(packet);
+            stream_opened = true;
+            bt_config.state = BT_AUDIO_CONNECTED;
+            bt_config.connected_device.connected = true;
+            bt_config.connected_device.paired = true;
+            sbc_ready_to_send = true;
+            break;
+            
+        case AVDTP_EVENT_STREAM_RELEASED:
+            printf("BT: A2DP stream released\n");
+            stream_opened = false;
+            streaming = false;
+            sbc_ready_to_send = false;
+            break;
+            
+        case AVRCP_EVENT_CONNECTION_ESTABLISHED:
+            printf("BT: AVRCP connection established\n");
+            avrcp_cid = avrcp_event_connection_established_get_avrcp_cid(packet);
+            break;
+            
+        case AVRCP_EVENT_CONNECTION_RELEASED:
+            printf("BT: AVRCP connection released\n");
+            avrcp_cid = 0;
+            break;
+            
+        case SM_EVENT_PAIRING_COMPLETE:
+            if (sm_event_pairing_complete_get_status(packet) == 0) {
+                printf("BT: Pairing successful\n");
+                bt_config.connected_device.paired = true;
+            } else {
+                printf("BT: Pairing failed\n");
+            }
+            break;
+            
+        default:
+            break;
+    }
 }
 
 // Process commands from pgusinit
