@@ -554,9 +554,6 @@ __force_inline void write_picogus_high(uint8_t value) {
     case CMD_BT_SCAN:
         bt_audio_scan_start();
         break;
-    case CMD_BT_STOP:
-        bt_audio_scan_stop();
-        break;
     case CMD_BT_PAIR:
         // Device address is sent as a string, we'll handle it in the data processing
         bt_pairing_address[cur_write++] = value;

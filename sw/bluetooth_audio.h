@@ -60,7 +60,7 @@ void bt_audio_stop_streaming(void);
 
 // Device management
 bool bt_audio_scan_start(void);
-bool bt_audio_scan_stop(void);
+bool bt_audio_scan_stop(void);  // Auto-stops after 10 seconds, manual stop not needed
 bool bt_audio_pair_device(const char *address);
 bool bt_audio_unpair_device(const char *address);
 bool bt_audio_connect_device(const char *address);

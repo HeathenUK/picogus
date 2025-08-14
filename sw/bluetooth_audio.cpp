@@ -153,14 +153,13 @@ bool bt_audio_scan_start(void) {
     return true;
 }
 
-// Stop Bluetooth device scanning
+// Stop Bluetooth device scanning (no longer needed - auto-stops after 10 seconds)
 bool bt_audio_scan_stop(void) {
-    if (!bt_initialized || !scan_active) {
+    if (!bt_initialized) {
         return false;
     }
 
-    printf("BT: Stopping device scan...\n");
-    scan_active = false;
+    printf("BT: Manual scan stop requested (scan auto-stops after 10 seconds)\n");
     return true;
 }
 
@@ -266,10 +265,6 @@ void bt_audio_process_command(uint8_t cmd, const uint8_t *data, uint16_t length)
             
         case CMD_BT_SCAN:
             bt_audio_scan_start();
-            break;
-            
-        case CMD_BT_STOP:
-            bt_audio_scan_stop();
             break;
             
         case CMD_BT_PAIR:
