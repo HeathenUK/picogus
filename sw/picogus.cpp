@@ -65,6 +65,24 @@ constexpr float iow_clkdiv = (float)rp2_clock / 183000.0;
 
 uint LED_PIN;
 
+#ifdef PICOW
+#define FIFO_WIFI_STATUS 0x89
+extern void PG_Wifi_Connect(const char* ssid, const char* pass);
+extern uint8_t PG_Wifi_ReadStatusStr(void);
+
+// Stub implementations for WiFi functions when not building NE2000 target
+void PG_Wifi_Connect(const char* ssid, const char* pass) {
+    // Stub implementation - do nothing
+    (void)ssid;
+    (void)pass;
+}
+
+uint8_t PG_Wifi_ReadStatusStr(void) {
+    // Stub implementation - return 0 (no status)
+    return 0;
+}
+#endif
+
 #include "M62429/M62429.h"
 M62429* m62429;
 

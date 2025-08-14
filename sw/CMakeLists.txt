@@ -113,6 +113,7 @@ function(config_target TARGET_NAME MULTIFW)
         PICO_AUDIO_I2S_PIO=1
         PICO_AUDIO_I2S_SM=3
         M62429_PIO=1
+        PICOW=1
     )
 
     if(USE_LTO)
