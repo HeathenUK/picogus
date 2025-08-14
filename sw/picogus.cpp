@@ -118,8 +118,10 @@ extern "C" void mke_init();
 #include "cdrom/cdrom_image_manager.h"
 cdrom_t cdrom;
 
-static uint32_t cur_read_idx;
 #endif
+
+// Global read index for CDROM and Bluetooth
+static uint32_t cur_read_idx;
 
 #ifdef SOUND_GUS
 #include "gus/gus-x.cpp"
@@ -692,6 +694,28 @@ __force_inline uint8_t read_picogus_high(void) {
         break;
     case CMD_CDPORT: // CD Base port
         return settings.CD.basePort == 0xFFFF ? 0 : (settings.CD.basePort >> 8);
+    // Bluetooth status and device info (PicoW only)
+#ifdef PICOW
+    case CMD_BT_STATUS:
+        return (uint8_t)bt_status;
+    case CMD_BT_DEVICES:
+        if (cur_read_idx == bt_device_count) { // If end of devices
+            cur_read_idx = cur_read = 0;
+            return 0x04; // EOT
+        }
+        if (cur_read == 0) { // Start of device
+            // Return device address
+            ret = bt_devices[cur_read_idx].address[cur_read++];
+            if (ret == 0) { // End of address
+                cur_read = 0;
+                ++cur_read_idx;
+            }
+            return ret;
+        }
+        return 0;
+    case CMD_BT_VOLUME:
+        return bt_audio_get_volume();
+#endif
 #ifdef CDROM
     case CMD_CDSTATUS:
         // printf("cdstatus %x\n", cdrom.image_status);
@@ -1213,6 +1237,12 @@ int main()
         BOARD_TYPE = PICOGUS_2;
     }
     gpio_set_mask(LED_PIN);
+
+#ifdef PICOW
+    // Initialize Bluetooth audio system for PicoW boards
+    puts("Initializing Bluetooth audio system...");
+    bt_audio_init();
+#endif
 
     if (BOARD_TYPE == PICOGUS_2) {
         // Create new interface to M62429 digital volume control

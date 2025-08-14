@@ -187,8 +187,8 @@ function(config_target TARGET_NAME MULTIFW)
         system/pico_pic.c
     )
     
-    # Add Bluetooth audio only for PicoW multifirmware builds
-    if(PICOW AND MULTIFW)
+    # Add Bluetooth audio for PicoW builds
+    if(PICOW)
         target_sources(${TARGET_NAME} PRIVATE bluetooth_audio.cpp)
     endif()
     pico_generate_pio_header(${TARGET_NAME} ${CMAKE_CURRENT_LIST_DIR}/M62429/M62429.pio)
@@ -233,7 +233,6 @@ endif()
     
     # Add BTstack for Bluetooth functionality
     if(PICOW)
-        target_link_libraries(${TARGET_NAME} pico_btstack_cyw43)
         target_compile_definitions(${TARGET_NAME} PRIVATE PICOW=1)
     endif()
     
