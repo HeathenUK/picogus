@@ -260,7 +260,6 @@ __force_inline void select_picogus(uint8_t value) {
 #ifdef PICOW
     case CMD_BT_INIT:
     case CMD_BT_SCAN:
-    case CMD_BT_STOP:
     case CMD_BT_DISCONN:
     case CMD_BT_STATUS:
     case CMD_BT_DEVICES:
