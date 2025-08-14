@@ -41,6 +41,7 @@
 #define MAX_NR_SERVICE_RECORD_ITEMS 4
 #define MAX_NR_SM_LOOKUP_ENTRIES 10
 #define MAX_NR_WHITELIST_ENTRIES 1
+#define NVM_NUM_LINK_KEYS 10
 
 // Audio configuration
 #define MAX_NR_A2DP_SOURCES 1
