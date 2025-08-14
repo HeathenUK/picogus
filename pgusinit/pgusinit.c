@@ -861,6 +861,71 @@ static bool cmdBTScan(const char* arg, const int cmd)
 {
     printf("Starting Bluetooth scan...\n");
     outp(CONTROL_PORT, cmd);
+    
+    // Wait for scan completion (10 seconds) and read results
+    printf("Scanning for Bluetooth devices...\n");
+    
+    // Wait for scan to complete by polling for completion signal
+    uint32_t timeout = 0;
+    uint8_t scan_status = 0;
+    
+    while (timeout < 12000) {  // 12 second timeout (scan takes ~10s)
+        delay(100);  // 100ms delay between polls
+        timeout += 100;
+        
+        // Check if scan is complete
+        outp(CONTROL_PORT, CMD_BT_STATUS);
+        scan_status = inp(DATA_PORT_HIGH);
+        
+        if (scan_status & 0x80) {  // Bit 7 indicates scan complete
+            break;
+        }
+    }
+    
+    if (timeout >= 12000) {
+        printf("Scan timeout - no devices found\n");
+        return true;
+    }
+    
+    // Read device count
+    outp(CONTROL_PORT, CMD_BT_DEVICES);
+    uint8_t device_count = inp(DATA_PORT_HIGH);
+    
+    if (device_count == 0) {
+        printf("No Bluetooth devices found\n");
+        return true;
+    }
+    
+    printf("Found %d Bluetooth device(s):\n", device_count);
+    
+    // Read each device's information
+    for (int i = 0; i < device_count && i < 10; i++) {  // Max 10 devices
+        // Read device address (6 bytes)
+        char address[18];
+        sprintf(address, "%02X:%02X:%02X:%02X:%02X:%02X",
+                inp(DATA_PORT_HIGH), inp(DATA_PORT_HIGH),
+                inp(DATA_PORT_HIGH), inp(DATA_PORT_HIGH),
+                inp(DATA_PORT_HIGH), inp(DATA_PORT_HIGH));
+        
+        // Read device name length
+        uint8_t name_len = inp(DATA_PORT_HIGH);
+        
+        // Read device name
+        char name[33] = {0};
+        if (name_len > 0 && name_len <= 32) {
+            for (int j = 0; j < name_len; j++) {
+                name[j] = inp(DATA_PORT_HIGH);
+            }
+        }
+        
+        // Display device info
+        if (name[0]) {
+            printf("  %d. %s (%s)\n", i + 1, address, name);
+        } else {
+            printf("  %d. %s (Unknown)\n", i + 1, address);
+        }
+    }
+    
     return true;
 }
 

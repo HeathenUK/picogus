@@ -21,6 +21,13 @@
 #include <cstdio>
 #include <cstring>
 
+// Data port output function for Pico
+static inline void outp(uint16_t port, uint8_t value) {
+    // This is a stub - in real Pico code, this would write to the data port
+    // For now, we'll use printf to simulate the data output
+    printf("DATA_PORT[0x%02X] = 0x%02X\n", port, value);
+}
+
 // Maximum number of discovered devices
 #define MAX_DISCOVERED_DEVICES 20
 
@@ -299,22 +306,49 @@ void bt_audio_process_command(uint8_t cmd, const uint8_t *data, uint16_t length)
             break;
             
         case CMD_BT_STATUS:
-            printf("BT: Status - Connected: %s, State: %d, Volume: %d%%\n", 
-                   bt_audio_is_connected() ? "Yes" : "No",
-                   bt_audio_get_state(),
-                   bt_audio_get_volume());
+            // Return status information via data port
+            {
+                uint8_t status = 0;
+                if (bt_audio_is_connected()) status |= 0x01;  // Bit 0: Connected
+                if (scan_active) status |= 0x02;              // Bit 1: Scanning
+                if (discovered_device_count > 0) status |= 0x80; // Bit 7: Scan complete with devices
+                
+                outp(DATA_PORT_HIGH, status);
+                printf("BT: Status - Connected: %s, State: %d, Volume: %d%%, Scan: %s\n", 
+                       bt_audio_is_connected() ? "Yes" : "No",
+                       bt_audio_get_state(),
+                       bt_audio_get_volume(),
+                       scan_active ? "Active" : "Inactive");
+            }
             break;
             
         case CMD_BT_DEVICES:
-            // Return discovered devices count and list
-            printf("BT: Discovered devices: %d\n", bt_audio_get_discovered_device_count());
-            if (bt_audio_get_discovered_device_count() > 0) {
-                bt_device_t devices[MAX_DISCOVERED_DEVICES];
-                int count = bt_audio_get_discovered_devices(devices, MAX_DISCOVERED_DEVICES);
-                for (int i = 0; i < count; i++) {
-                    printf("BT: Device %d: %s (%s)\n", i + 1, 
-                           devices[i].address,
-                           devices[i].name);
+            // Return discovered devices count and list via data port
+            {
+                int device_count = bt_audio_get_discovered_device_count();
+                outp(DATA_PORT_HIGH, device_count);
+                
+                if (device_count > 0) {
+                    bt_device_t devices[MAX_DISCOVERED_DEVICES];
+                    int count = bt_audio_get_discovered_devices(devices, MAX_DISCOVERED_DEVICES);
+                    
+                    for (int i = 0; i < count && i < 10; i++) {
+                        // Send device address (6 bytes)
+                        for (int j = 0; j < 6; j++) {
+                            uint8_t addr_byte = 0;
+                            sscanf(devices[i].address + j * 3, "%2hhx", &addr_byte);
+                            outp(DATA_PORT_HIGH, addr_byte);
+                        }
+                        
+                        // Send device name length and name
+                        int name_len = strlen(devices[i].name);
+                        if (name_len > 32) name_len = 32;
+                        outp(DATA_PORT_HIGH, name_len);
+                        
+                        for (int j = 0; j < name_len; j++) {
+                            outp(DATA_PORT_HIGH, devices[i].name[j]);
+                        }
+                    }
                 }
             }
             break;
@@ -357,5 +391,10 @@ int bt_audio_get_discovered_device_count(void) { return 0; }
 bool bt_audio_is_scanning(void) { return false; }
 void bt_audio_process_command(uint8_t cmd, const uint8_t *data, uint16_t length) { 
     (void)cmd; (void)data; (void)length; 
+}
+
+// Stub data port output for non-PicoW builds
+static inline void outp(uint16_t port, uint8_t value) {
+    (void)port; (void)value; // No-op for non-PicoW builds
 }
 #endif
