@@ -874,6 +874,7 @@ static bool cmdBTStop(const char* arg, const int cmd)
 
 static bool cmdBTPair(const char* arg, const int cmd)
 {
+    int i;
     if (!arg || strlen(arg) == 0) {
         printf("Error: Device address required for pairing\n");
         return false;
@@ -881,7 +882,7 @@ static bool cmdBTPair(const char* arg, const int cmd)
     printf("Pairing with device: %s\n", arg);
     outp(CONTROL_PORT, cmd);
     // Send device address as string
-    for (int i = 0; i < strlen(arg); i++) {
+    for (i = 0; i < strlen(arg); i++) {
         outp(DATA_PORT_HIGH, arg[i]);
     }
     outp(DATA_PORT_HIGH, 0); // null terminator
@@ -890,6 +891,7 @@ static bool cmdBTPair(const char* arg, const int cmd)
 
 static bool cmdBTUnpair(const char* arg, const int cmd)
 {
+    int i;
     if (!arg || strlen(arg) == 0) {
         printf("Error: Device address required for unpairing\n");
         return false;
@@ -897,7 +899,7 @@ static bool cmdBTUnpair(const char* arg, const int cmd)
     printf("Unpairing device: %s\n", arg);
     outp(CONTROL_PORT, cmd);
     // Send device address as string
-    for (int i = 0; i < strlen(arg); i++) {
+    for (i = 0; i < strlen(arg); i++) {
         outp(DATA_PORT_HIGH, arg[i]);
     }
     outp(DATA_PORT_HIGH, 0); // null terminator
@@ -906,6 +908,7 @@ static bool cmdBTUnpair(const char* arg, const int cmd)
 
 static bool cmdBTConnect(const char* arg, const int cmd)
 {
+    int i;
     if (!arg || strlen(arg) == 0) {
         printf("Error: Device address required for connection\n");
         return false;
@@ -913,7 +916,7 @@ static bool cmdBTConnect(const char* arg, const int cmd)
     printf("Connecting to A2DP device: %s\n", arg);
     outp(CONTROL_PORT, cmd);
     // Send device address as string
-    for (int i = 0; i < strlen(arg); i++) {
+    for (i = 0; i < strlen(arg); i++) {
         outp(DATA_PORT_HIGH, arg[i]);
     }
     outp(DATA_PORT_HIGH, 0); // null terminator
