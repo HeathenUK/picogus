@@ -204,14 +204,14 @@ bool bt_audio_scan_start(void) {
         return true;
     }
 
-    printf("BT: Starting device scan...\n");
+    printf("BT: Starting 10-second device scan...\n");
     
     // Clear previous discoveries
     discovered_device_count = 0;
     memset(discovered_devices, 0, sizeof(discovered_devices));
     
-    // Start inquiry
-    gap_inquiry_start(5);  // 5 * 1.28s = 6.4s inquiry
+    // Start inquiry for 10 seconds (8 * 1.28s ≈ 10.24s)
+    gap_inquiry_start(8);
     inquiry_active = true;
     
     return true;
@@ -338,6 +338,31 @@ int bt_audio_get_paired_devices(bt_device_t *devices, int max_devices) {
     return count;
 }
 
+// Get list of discovered devices from last scan
+int bt_audio_get_discovered_devices(bt_device_t *devices, int max_devices) {
+    if (!btstack_initialized) {
+        return 0;
+    }
+
+    int count = 0;
+    for (int i = 0; i < discovered_device_count && count < max_devices; i++) {
+        devices[count] = discovered_devices[i];
+        count++;
+    }
+    
+    return count;
+}
+
+// Get number of discovered devices
+int bt_audio_get_discovered_device_count(void) {
+    return discovered_device_count;
+}
+
+// Check if scanning is currently active
+bool bt_audio_is_scanning(void) {
+    return inquiry_active;
+}
+
 // Audio timer handler for streaming
 static void audio_timer_handler(btstack_timer_source_t *ts) {
     if (!streaming || !stream_opened) {
@@ -432,7 +457,12 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             break;
             
         case GAP_EVENT_INQUIRY_COMPLETE:
-            printf("BT: Device scan completed, found %d devices\n", discovered_device_count);
+            printf("BT: Device scan completed, found %d devices:\n", discovered_device_count);
+            for (int i = 0; i < discovered_device_count; i++) {
+                printf("BT:   %d. %s (%s)\n", i + 1, 
+                       discovered_devices[i].address,
+                       discovered_devices[i].name[0] ? discovered_devices[i].name : "Unknown");
+            }
             inquiry_active = false;
             break;
             
@@ -540,7 +570,17 @@ void bt_audio_process_command(uint8_t cmd, const uint8_t *data, uint16_t length)
             break;
             
         case CMD_BT_DEVICES:
-            // Device list is returned via the data port
+            // Return discovered devices count and list
+            printf("BT: Discovered devices: %d\n", bt_audio_get_discovered_device_count());
+            if (bt_audio_get_discovered_device_count() > 0) {
+                bt_device_t devices[MAX_DISCOVERED_DEVICES];
+                int count = bt_audio_get_discovered_devices(devices, MAX_DISCOVERED_DEVICES);
+                for (int i = 0; i < count; i++) {
+                    printf("BT: Device %d: %s (%s)\n", i + 1, 
+                           devices[i].address,
+                           devices[i].name[0] ? devices[i].name : "Unknown");
+                }
+            }
             break;
             
         case CMD_BT_VOLUME:
@@ -576,6 +616,11 @@ bool bt_audio_disconnect_device(void) { return false; }
 int bt_audio_get_paired_devices(bt_device_t *devices, int max_devices) { 
     (void)devices; (void)max_devices; return 0; 
 }
+int bt_audio_get_discovered_devices(bt_device_t *devices, int max_devices) { 
+    (void)devices; (void)max_devices; return 0; 
+}
+int bt_audio_get_discovered_device_count(void) { return 0; }
+bool bt_audio_is_scanning(void) { return false; }
 void bt_audio_process_command(uint8_t cmd, const uint8_t *data, uint16_t length) { 
     (void)cmd; (void)data; (void)length; 
 }

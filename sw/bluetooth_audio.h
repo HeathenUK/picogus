@@ -66,6 +66,9 @@ bool bt_audio_unpair_device(const char *address);
 bool bt_audio_connect_device(const char *address);
 bool bt_audio_disconnect_device(void);
 int bt_audio_get_paired_devices(bt_device_t *devices, int max_devices);
+int bt_audio_get_discovered_devices(bt_device_t *devices, int max_devices);
+int bt_audio_get_discovered_device_count(void);
+bool bt_audio_is_scanning(void);
 
 // Command processing (for pgusinit integration)
 void bt_audio_process_command(uint8_t cmd, const uint8_t *data, uint16_t length);
