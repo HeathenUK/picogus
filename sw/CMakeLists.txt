@@ -42,6 +42,9 @@ set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_LIST_DIR}/tinyusb)
 
 # Disable CYW43 support to avoid BTstack compilation issues
 set(PICO_CYW43_SUPPORTED 0)
+set(PICO_CYW43_ARCH_NONE 1)
+set(PICO_CYW43_ARCH_POLL 0)
+set(PICO_CYW43_ARCH_THREADSAFE_BACKGROUND 0)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
