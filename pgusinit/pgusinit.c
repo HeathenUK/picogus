@@ -34,6 +34,7 @@ static card_mode_t newMode = 0;
 static board_type_t board_type;
 static bool wifichg = false;
 static bool permanent = false;
+static bool bt_command_used = false;
 static bool is_console;
 static uint8_t page_lines;
 
@@ -852,6 +853,7 @@ static bool cmdSave(const char* arg, const int cmd)
 // Bluetooth command functions
 static bool cmdBTInit(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     printf("Initializing Bluetooth...\n");
     outp(CONTROL_PORT, cmd);
     return true;
@@ -859,6 +861,7 @@ static bool cmdBTInit(const char* arg, const int cmd)
 
 static bool cmdBTScan(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     printf("Starting Bluetooth scan...\n");
     outp(CONTROL_PORT, cmd);
     
@@ -933,6 +936,7 @@ static bool cmdBTScan(const char* arg, const int cmd)
 
 static bool cmdBTPair(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     int i;
     if (!arg || strlen(arg) == 0) {
         printf("Error: Device address required for pairing\n");
@@ -950,6 +954,7 @@ static bool cmdBTPair(const char* arg, const int cmd)
 
 static bool cmdBTUnpair(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     int i;
     if (!arg || strlen(arg) == 0) {
         printf("Error: Device address required for unpairing\n");
@@ -967,6 +972,7 @@ static bool cmdBTUnpair(const char* arg, const int cmd)
 
 static bool cmdBTConnect(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     int i;
     if (!arg || strlen(arg) == 0) {
         printf("Error: Device address required for connection\n");
@@ -984,6 +990,7 @@ static bool cmdBTConnect(const char* arg, const int cmd)
 
 static bool cmdBTDisconnect(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     printf("Disconnecting from A2DP device...\n");
     outp(CONTROL_PORT, cmd);
     return true;
@@ -991,6 +998,7 @@ static bool cmdBTDisconnect(const char* arg, const int cmd)
 
 static bool cmdBTStatus(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     printf("Getting Bluetooth status...\n");
     outp(CONTROL_PORT, cmd);
     return true;
@@ -998,6 +1006,7 @@ static bool cmdBTStatus(const char* arg, const int cmd)
 
 static bool cmdBTDevices(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     printf("Listing paired devices...\n");
     outp(CONTROL_PORT, cmd);
     return true;
@@ -1005,6 +1014,7 @@ static bool cmdBTDevices(const char* arg, const int cmd)
 
 static bool cmdBTVolume(const char* arg, const int cmd)
 {
+    bt_command_used = true;
     return ctrlSendUint8(arg, cmd, 0, 100);
 }
 
@@ -1350,6 +1360,11 @@ int main(int argc, char* argv[]) {
         if (!parseCommand(argc, argv, &i, parseCommands)) {
             return 1;
         }
+    }
+
+    // If Bluetooth commands were used, don't do the rest of initialization
+    if (bt_command_used) {
+        return 0;
     }
 
     // If mode was set in commands, apply it
