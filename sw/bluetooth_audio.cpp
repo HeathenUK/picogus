@@ -21,6 +21,20 @@
 #include <cstdio>
 #include <cstring>
 
+#ifdef PICOW
+// Real BTstack includes for actual Bluetooth functionality
+#include "btstack.h"
+#include "btstack_config.h"
+#include "hci.h"
+#include "hci_cmd.h"
+#include "hci_event.h"
+#include "gap.h"
+#include "l2cap.h"
+#include "classic/avdtp.h"
+#include "classic/avdtp_source.h"
+#include "classic/avrcp.h"
+#endif
+
 // Data port output function for Pico
 static inline void outp(uint16_t port, uint8_t value) {
     // This is a stub - in real Pico code, this would write to the data port
@@ -28,10 +42,7 @@ static inline void outp(uint16_t port, uint8_t value) {
     printf("DATA_PORT[0x%02X] = 0x%02X\n", port, value);
 }
 
-// Delay function for simulation
-static inline void delay(int milliseconds) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
-}
+
 
 // Maximum number of discovered devices
 #define MAX_DISCOVERED_DEVICES 20
