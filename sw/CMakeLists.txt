@@ -43,6 +43,9 @@ set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_LIST_DIR}/tinyusb)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
+# Disable CYW43 support to avoid BTstack compilation issues
+set(PICO_CYW43_SUPPORTED 0)
+
 ################################################################################
 # Helper function for setting linker script
 function(set_linker_script TARGET script)
