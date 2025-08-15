@@ -152,6 +152,18 @@ static void usage(card_mode_t mode, bool print_all)
         pageprintf("   /wifinopass   - unset the WiFi password to connect to an open access point\n");
         pageprintf("   /wifistatus   - print current WiFi status\n");
     }
+    //         "...............................................................................\n"
+    pageprintf("Bluetooth settings:\n");
+    pageprintf("   /btinit        - initialize Bluetooth subsystem\n");
+    pageprintf("   /btscan        - start scanning for Bluetooth devices\n");
+    pageprintf("   /btstop        - stop Bluetooth scanning\n");
+    pageprintf("   /btpair addr   - pair with device at address (e.g., 00:11:22:33:44:55)\n");
+    pageprintf("   /btunpair addr - unpair device at address\n");
+    pageprintf("   /btconnect addr- connect to A2DP device at address\n");
+    pageprintf("   /btdisconnect  - disconnect from current A2DP device\n");
+    pageprintf("   /btstatus      - show Bluetooth connection status\n");
+    pageprintf("   /btdevices     - list paired devices\n");
+    pageprintf("   /btvolume x    - set Bluetooth audio volume: 0 - 100\n");
 }
 
 
@@ -838,6 +850,105 @@ static bool cmdSave(const char* arg, const int cmd)
     return true;
 }
 
+// Bluetooth command functions
+static bool cmdBTInit(const char* arg, const int cmd)
+{
+    printf("Initializing Bluetooth...\n");
+    outp(CONTROL_PORT, cmd);
+    return true;
+}
+
+static bool cmdBTScan(const char* arg, const int cmd)
+{
+    printf("Starting Bluetooth scan...\n");
+    outp(CONTROL_PORT, cmd);
+    return true;
+}
+
+static bool cmdBTStop(const char* arg, const int cmd)
+{
+    printf("Stopping Bluetooth scan...\n");
+    outp(CONTROL_PORT, cmd);
+    return true;
+}
+
+static bool cmdBTPair(const char* arg, const int cmd)
+{
+    int i;
+    if (!arg || strlen(arg) == 0) {
+        printf("Error: Device address required for pairing\n");
+        return false;
+    }
+    printf("Pairing with device: %s\n", arg);
+    outp(CONTROL_PORT, cmd);
+    // Send device address as string
+    for (i = 0; i < strlen(arg); i++) {
+        outp(DATA_PORT_HIGH, arg[i]);
+    }
+    outp(DATA_PORT_HIGH, 0); // null terminator
+    return true;
+}
+
+static bool cmdBTUnpair(const char* arg, const int cmd)
+{
+    int i;
+    if (!arg || strlen(arg) == 0) {
+        printf("Error: Device address required for unpairing\n");
+        return false;
+    }
+    printf("Unpairing device: %s\n", arg);
+    outp(CONTROL_PORT, cmd);
+    // Send device address as string
+    for (i = 0; i < strlen(arg); i++) {
+        outp(DATA_PORT_HIGH, arg[i]);
+    }
+    outp(DATA_PORT_HIGH, 0); // null terminator
+    return true;
+}
+
+static bool cmdBTConnect(const char* arg, const int cmd)
+{
+    int i;
+    if (!arg || strlen(arg) == 0) {
+        printf("Error: Device address required for connection\n");
+        return false;
+    }
+    printf("Connecting to A2DP device: %s\n", arg);
+    outp(CONTROL_PORT, cmd);
+    // Send device address as string
+    for (i = 0; i < strlen(arg); i++) {
+        outp(DATA_PORT_HIGH, arg[i]);
+    }
+    outp(DATA_PORT_HIGH, 0); // null terminator
+    return true;
+}
+
+static bool cmdBTDisconnect(const char* arg, const int cmd)
+{
+    printf("Disconnecting from A2DP device...\n");
+    outp(CONTROL_PORT, cmd);
+    return true;
+}
+
+static bool cmdBTStatus(const char* arg, const int cmd)
+{
+    printf("Getting Bluetooth status...\n");
+    outp(CONTROL_PORT, cmd);
+    return true;
+}
+
+static bool cmdBTDevices(const char* arg, const int cmd)
+{
+    printf("Listing paired devices...\n");
+    outp(CONTROL_PORT, cmd);
+    return true;
+}
+
+static bool cmdBTVolume(const char* arg, const int cmd)
+{
+    return ctrlSendUint8(arg, cmd, 0, 100);
+}
+
 ParseCommand parseCommandsMinimal[] = {
     {"/?", cmdDisplayUsage, 0, ARG_NONE},
     {"/??", cmdDisplayUsage, 1, ARG_NONE},
@@ -889,6 +1000,16 @@ ParseCommand parseCommands[] = {
     {"/cdvol", cmdSetVol, CMD_CDVOL, ARG_REQUIRE, "100"},
     {"/gusvol", cmdSetVol, CMD_GUSVOL, ARG_REQUIRE, "100"},
     {"/psgvol", cmdSetVol, CMD_PSGVOL, ARG_REQUIRE, "100"},
+    {"/btinit", cmdBTInit, CMD_BT_INIT, ARG_NONE},
+    {"/btscan", cmdBTScan, CMD_BT_SCAN, ARG_NONE},
+    {"/btstop", cmdBTStop, CMD_BT_STOP, ARG_NONE},
+    {"/btpair", cmdBTPair, CMD_BT_PAIR, ARG_REQUIRE},
+    {"/btunpair", cmdBTUnpair, CMD_BT_UNPAIR, ARG_REQUIRE},
+    {"/btconnect", cmdBTConnect, CMD_BT_CONNECT, ARG_REQUIRE},
+    {"/btdisconnect", cmdBTDisconnect, CMD_BT_DISCONN, ARG_NONE},
+    {"/btstatus", cmdBTStatus, CMD_BT_STATUS, ARG_NONE},
+    {"/btdevices", cmdBTDevices, CMD_BT_DEVICES, ARG_NONE},
+    {"/btvolume", cmdBTVolume, CMD_BT_VOLUME, ARG_REQUIRE, "50"},
     {0}
 };
  

@@ -15,6 +15,7 @@ target_sources(ne2000 INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/ne2000.c    
 )
 
-target_link_libraries(ne2000 INTERFACE
-    pico_cyw43_arch_none
-) 
+# Removed pico_cyw43_arch_none dependency to avoid CYW43 compilation issues
+# target_link_libraries(ne2000 INTERFACE
+#     pico_cyw43_arch_none
+# ) 

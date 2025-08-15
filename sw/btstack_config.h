@@ -1,0 +1,43 @@
+//
+// btstack_config.h - Minimal configuration to satisfy Pico SDK CYW43 driver
+//
+#ifndef BTSTACK_CONFIG_H
+#define BTSTACK_CONFIG_H
+
+// Disable all BTstack features since we're using a simplified implementation
+#define ENABLE_CLASSIC 0
+#define ENABLE_LOG_ERROR 0
+#define ENABLE_LOG_INFO 0
+#define ENABLE_PRINTF_HEXDUMP 0
+#define ENABLE_SCO_OVER_HCI 0
+#define ENABLE_SDP_DES_DUMP 0
+#define ENABLE_SOFTWARE_AES128 0
+#define ENABLE_A2DP_SOURCE 0
+#define ENABLE_AVDTP_SOURCE 0
+#define ENABLE_AVRCP 0
+#define ENABLE_GAP_INQUIRY 0
+#define ENABLE_SM 0
+
+// Minimal buffer sizes
+#define HCI_ACL_PAYLOAD_SIZE 1024
+#define HCI_INCOMING_PRE_BUFFER_SIZE 14
+#define MAX_NR_AVDTP_CONNECTIONS 1
+#define MAX_NR_AVRCP_CONNECTIONS 1
+#define MAX_NR_BTSTACK_LINK_KEY_DB_MEMORY_ENTRIES 2
+#define MAX_NR_GATT_CLIENTS 1
+#define MAX_NR_HCI_CONNECTIONS 1
+#define MAX_NR_HFP_CONNECTIONS 1
+#define MAX_NR_L2CAP_CHANNELS 2
+#define MAX_NR_L2CAP_SERVICES 2
+#define MAX_NR_RFCOMM_CHANNELS 1
+#define MAX_NR_RFCOMM_MULTIPLEXERS 1
+#define MAX_NR_RFCOMM_SERVICES 1
+#define MAX_NR_SERVICE_RECORD_ITEMS 1
+#define MAX_NR_SM_LOOKUP_ENTRIES 3
+#define MAX_NR_WHITELIST_ENTRIES 1
+
+// Disable WiFi/lwIP
+#define DISABLE_WIFI 1
+#define DISABLE_LWIP 1
+
+#endif // BTSTACK_CONFIG_H

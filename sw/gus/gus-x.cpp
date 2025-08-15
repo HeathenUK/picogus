@@ -766,7 +766,9 @@ void GUS_StopDMA();
 void GUS_StartDMA();
 
 static void GUSReset(void) {
+#ifndef PICOW
     gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
+#endif
     unsigned char p_GUS_reset_reg = GUS_reset_reg;
 
     /* NTS: From the Ultrasound SDK:

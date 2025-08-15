@@ -57,6 +57,11 @@ extern uint LED_PIN;
 
 #include <string.h>
 
+// Bluetooth audio system (PicoW only)
+#ifdef PICOW
+#include "bluetooth_audio.h"
+#endif
+
 #if PICO_ON_DEVICE
 #include "pico/binary_info.h"
 bi_decl(bi_3pins_with_names(PICO_AUDIO_I2S_DATA_PIN, "I2S DIN", PICO_AUDIO_I2S_CLOCK_PIN_BASE, "I2S BCK", PICO_AUDIO_I2S_CLOCK_PIN_BASE+1, "I2S LRCK"));
@@ -177,6 +182,11 @@ void play_psg() {
             samples[(i << 1) + 1] = scale_sample(buf[(i << 1) + 1], psg_volume, 0);
         }
         buffer->sample_count = SAMPLES_PER_BUFFER;
+        
+        // Process audio for Bluetooth output (PicoW only)
+#ifdef PICOW
+        bt_audio_process_audio(samples, SAMPLES_PER_BUFFER, 44100);
+#endif
 
         give_audio_buffer(ap, buffer);
 #ifdef USB_STACK

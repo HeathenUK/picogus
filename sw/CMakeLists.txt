@@ -40,6 +40,12 @@ endif()
 
 set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_LIST_DIR}/tinyusb)
 
+# Disable CYW43 support to avoid BTstack compilation issues
+set(PICO_CYW43_SUPPORTED 0)
+set(PICO_CYW43_ARCH_NONE 1)
+set(PICO_CYW43_ARCH_POLL 0)
+set(PICO_CYW43_ARCH_THREADSAFE_BACKGROUND 0)
+
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
@@ -106,6 +112,13 @@ function(config_target TARGET_NAME MULTIFW)
         ${CMAKE_CURRENT_LIST_DIR}
     )
 
+    # Check if we're building for a Pico W board
+    if(PICO_BOARD STREQUAL "picow_fast" OR PICO_BOARD STREQUAL "picow" OR PICO_BOARD STREQUAL "PICO_W")
+        set(PICOW TRUE)
+    else()
+        set(PICOW FALSE)
+    endif()
+    
     target_compile_definitions(${TARGET_NAME} PRIVATE
         USE_AUDIO_I2S=1
         PICO_AUDIO_I2S_DATA_PIN=16
@@ -114,6 +127,11 @@ function(config_target TARGET_NAME MULTIFW)
         PICO_AUDIO_I2S_SM=3
         M62429_PIO=1
     )
+    
+    # Add PICOW definition only for Pico W boards
+    if(PICOW)
+        target_compile_definitions(${TARGET_NAME} PRIVATE PICOW=1)
+    endif()
 
     if(USE_LTO)
         # Pico SDK must be patched to allow for LTO so it is not enabled by default.
@@ -174,6 +192,11 @@ function(config_target TARGET_NAME MULTIFW)
         M62429/M62429.cpp
         system/pico_pic.c
     )
+    
+    # Add Bluetooth audio for PicoW builds
+    if(PICOW)
+        target_sources(${TARGET_NAME} PRIVATE bluetooth_audio.cpp)
+    endif()
     pico_generate_pio_header(${TARGET_NAME} ${CMAKE_CURRENT_LIST_DIR}/M62429/M62429.pio)
 if(PICOPOCKET)
     pico_generate_pio_header(${TARGET_NAME} ${CMAKE_CURRENT_LIST_DIR}/isa/isa_pocket.pio)
@@ -213,6 +236,12 @@ endif()
         hardware_adc
         hardware_exception
     )
+    
+    # Add BTstack for Bluetooth functionality
+    if(PICOW)
+        target_compile_definitions(${TARGET_NAME} PRIVATE PICOW=1)
+    endif()
+    
     pico_add_extra_outputs(${TARGET_NAME})
     
     if (SOUND_MPU)

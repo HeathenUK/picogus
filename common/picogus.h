@@ -95,6 +95,18 @@ static const char *modenames[8] = {
 #define CMD_GUSVOL     0x74 // GUS Volume
 #define CMD_PSGVOL     0x75 // PSG Volume
 
+// Bluetooth commands
+#define CMD_BT_INIT    0x80 // Initialize Bluetooth
+#define CMD_BT_SCAN    0x81 // Start Bluetooth scanning
+#define CMD_BT_STOP    0x82 // Stop Bluetooth scanning
+#define CMD_BT_PAIR    0x83 // Pair with device
+#define CMD_BT_UNPAIR  0x84 // Unpair device
+#define CMD_BT_CONNECT 0x85 // Connect to A2DP device
+#define CMD_BT_DISCONN 0x86 // Disconnect from A2DP device
+#define CMD_BT_STATUS  0x87 // Get Bluetooth status
+#define CMD_BT_DEVICES 0x88 // List paired devices
+#define CMD_BT_VOLUME  0x89 // Set Bluetooth volume
+
 #define CMD_DEFAULTS   0xE0 // Select reset to defaults register
 #define CMD_SAVE       0xE1 // Select save settings register
 #define CMD_REBOOT     0xE2 // Select reboot register

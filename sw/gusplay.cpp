@@ -57,6 +57,11 @@ extern dma_inst_t dma_config;
 #include "gus/gus-x.h"
 #define SAMPLES_PER_BUFFER 1024
 
+// Bluetooth audio system (PicoW only)
+#ifdef PICOW
+#include "bluetooth_audio.h"
+#endif
+
 #define DMA_PIO_SM 2
 
 struct audio_buffer_pool *init_audio() {
@@ -159,6 +164,12 @@ void play_gus() {
         // uint32_t gus_audio_begin = time_us_32();
         uint32_t sample_count = GUS_CallBack(buffer->max_sample_count, samples);
         buffer->sample_count = sample_count;
+        
+        // Process audio for Bluetooth output (PicoW only)
+#ifdef PICOW
+        bt_audio_process_audio(samples, sample_count, playback_rate);
+#endif
+        
         /*
         uint32_t gus_audio_elapsed = time_us_32() - gus_audio_begin;
         if (active_voices) {

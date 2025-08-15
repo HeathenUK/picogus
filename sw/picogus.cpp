@@ -65,10 +65,29 @@ constexpr float iow_clkdiv = (float)rp2_clock / 183000.0;
 
 uint LED_PIN;
 
+#ifdef PICOW
+#define FIFO_WIFI_STATUS 0x89
+extern void PG_Wifi_Connect(const char* ssid, const char* pass);
+extern uint8_t PG_Wifi_ReadStatusStr(void);
+
+// Stub implementations for WiFi functions when not building NE2000 target
+void PG_Wifi_Connect(const char* ssid, const char* pass) {
+    // Stub implementation - do nothing
+    (void)ssid;
+    (void)pass;
+}
+
+uint8_t PG_Wifi_ReadStatusStr(void) {
+    // Stub implementation - return 0 (no status)
+    return 0;
+}
+#endif
+
 #include "M62429/M62429.h"
 M62429* m62429;
 
-
+// Bluetooth audio system
+#include "bluetooth_audio.h"
 
 #ifdef SOUND_SB
 #include "sbdsp/sbdsp.h"
@@ -99,8 +118,10 @@ extern "C" void mke_init();
 #include "cdrom/cdrom_image_manager.h"
 cdrom_t cdrom;
 
-static uint32_t cur_read_idx;
 #endif
+
+// Global read index for CDROM and Bluetooth
+static uint32_t cur_read_idx;
 
 #ifdef SOUND_GUS
 #include "gus/gus-x.cpp"
@@ -175,6 +196,15 @@ const char* firmware_string = PICO_PROGRAM_NAME " v" PICO_PROGRAM_VERSION_STRING
 static uint8_t basePort_low;
 static uint8_t  mouseSensitivity_low;
 
+// Bluetooth variables (PicoW only)
+#ifdef PICOW
+static char bt_pairing_address[18];  // MAC address buffer
+static bt_audio_state_t bt_status = BT_AUDIO_DISCONNECTED;
+static bt_device_t bt_devices[10];  // Buffer for paired devices
+static uint8_t bt_device_count = 0;
+#define MAX_BT_DEVICES 10
+#endif
+
 __force_inline void select_picogus(uint8_t value) {
     // printf("select picogus %x\n", value);
     sel_reg = value;
@@ -226,8 +256,33 @@ __force_inline void select_picogus(uint8_t value) {
         memset(settings.WiFi.password, 0, sizeof(settings.WiFi.password));
         cur_write = 0;
         break;
+    // Bluetooth commands (PicoW only)
+#ifdef PICOW
+    case CMD_BT_INIT:
+    case CMD_BT_SCAN:
+    case CMD_BT_STOP:
+    case CMD_BT_DISCONN:
+    case CMD_BT_STATUS:
+    case CMD_BT_DEVICES:
+    case CMD_BT_VOLUME:
+        break;
+    case CMD_BT_PAIR:
+    case CMD_BT_UNPAIR:
+    case CMD_BT_CONNECT:
+        memset(bt_pairing_address, 0, sizeof(bt_pairing_address));
+        cur_write = 0;
+        break;
+#endif
     case CMD_WIFIAPPLY:
+        printf("Applying wifi settings: %s %s\n", settings.WiFi.ssid, settings.WiFi.password);
+#ifdef PICOW
+        PG_Wifi_Connect(settings.WiFi.ssid, settings.WiFi.password);
+#endif
+        break;
     case CMD_WIFISTAT:
+#ifdef PICOW
+        multicore_fifo_push_blocking(FIFO_WIFI_STATUS);
+#endif
         break;
     case CMD_CDPORT: // CMS Base port
         basePort_low = 0;
@@ -491,6 +546,56 @@ __force_inline void write_picogus_high(uint8_t value) {
     case CMD_FLASH: // Firmware write
         pico_firmware_write(value);
         break;
+    // Bluetooth commands (PicoW only)
+#ifdef PICOW
+    case CMD_BT_INIT:
+        bt_audio_init();
+        break;
+    case CMD_BT_SCAN:
+        bt_audio_scan_start();
+        break;
+    case CMD_BT_STOP:
+        bt_audio_scan_stop();
+        break;
+    case CMD_BT_PAIR:
+        // Device address is sent as a string, we'll handle it in the data processing
+        bt_pairing_address[cur_write++] = value;
+        if (value == 0 || cur_write >= 18) {  // null terminator or max length
+            bt_audio_pair_device(bt_pairing_address);
+            cur_write = 0;
+        }
+        break;
+    case CMD_BT_UNPAIR:
+        // Device address is sent as a string
+        bt_pairing_address[cur_write++] = value;
+        if (value == 0 || cur_write >= 18) {
+            bt_audio_unpair_device(bt_pairing_address);
+            cur_write = 0;
+        }
+        break;
+    case CMD_BT_CONNECT:
+        // Device address is sent as a string
+        bt_pairing_address[cur_write++] = value;
+        if (value == 0 || cur_write >= 18) {
+            bt_audio_connect_device(bt_pairing_address);
+            cur_write = 0;
+        }
+        break;
+    case CMD_BT_DISCONN:
+        bt_audio_disconnect_device();
+        break;
+    case CMD_BT_STATUS:
+        // Return status via data port
+        bt_status = bt_audio_get_state();
+        break;
+    case CMD_BT_DEVICES:
+        // Return device list via data port
+        bt_device_count = bt_audio_get_paired_devices(bt_devices, MAX_BT_DEVICES);
+        break;
+    case CMD_BT_VOLUME:
+        bt_audio_set_volume(value);
+        break;
+#endif
     }
 }
 
@@ -589,6 +694,28 @@ __force_inline uint8_t read_picogus_high(void) {
         break;
     case CMD_CDPORT: // CD Base port
         return settings.CD.basePort == 0xFFFF ? 0 : (settings.CD.basePort >> 8);
+    // Bluetooth status and device info (PicoW only)
+#ifdef PICOW
+    case CMD_BT_STATUS:
+        return (uint8_t)bt_status;
+    case CMD_BT_DEVICES:
+        if (cur_read_idx == bt_device_count) { // If end of devices
+            cur_read_idx = cur_read = 0;
+            return 0x04; // EOT
+        }
+        if (cur_read == 0) { // Start of device
+            // Return device address
+            ret = bt_devices[cur_read_idx].address[cur_read++];
+            if (ret == 0) { // End of address
+                cur_read = 0;
+                ++cur_read_idx;
+            }
+            return ret;
+        }
+        return 0;
+    case CMD_BT_VOLUME:
+        return bt_audio_get_volume();
+#endif
 #ifdef CDROM
     case CMD_CDSTATUS:
         // printf("cdstatus %x\n", cdrom.image_status);
@@ -1110,6 +1237,12 @@ int main()
         BOARD_TYPE = PICOGUS_2;
     }
     gpio_set_mask(LED_PIN);
+
+#ifdef PICOW
+    // Initialize Bluetooth audio system for PicoW boards
+    puts("Initializing Bluetooth audio system...");
+    bt_audio_init();
+#endif
 
     if (BOARD_TYPE == PICOGUS_2) {
         // Create new interface to M62429 digital volume control
