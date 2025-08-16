@@ -239,6 +239,10 @@ endif()
     
     # Add BTstack for Bluetooth functionality
     if(PICOW)
+        target_link_libraries(${TARGET_NAME} 
+            pico_btstack_classic
+            pico_btstack_sbc_encoder
+        )
         target_compile_definitions(${TARGET_NAME} PRIVATE PICOW=1)
     endif()
     

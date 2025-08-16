@@ -260,7 +260,6 @@ __force_inline void select_picogus(uint8_t value) {
 #ifdef PICOW
     case CMD_BT_INIT:
     case CMD_BT_SCAN:
-    case CMD_BT_STOP:
     case CMD_BT_DISCONN:
     case CMD_BT_STATUS:
     case CMD_BT_DEVICES:
@@ -553,9 +552,6 @@ __force_inline void write_picogus_high(uint8_t value) {
         break;
     case CMD_BT_SCAN:
         bt_audio_scan_start();
-        break;
-    case CMD_BT_STOP:
-        bt_audio_scan_stop();
         break;
     case CMD_BT_PAIR:
         // Device address is sent as a string, we'll handle it in the data processing

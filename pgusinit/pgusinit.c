@@ -155,8 +155,7 @@ static void usage(card_mode_t mode, bool print_all)
     //         "...............................................................................\n"
     pageprintf("Bluetooth settings:\n");
     pageprintf("   /btinit        - initialize Bluetooth subsystem\n");
-    pageprintf("   /btscan        - start scanning for Bluetooth devices\n");
-    pageprintf("   /btstop        - stop Bluetooth scanning\n");
+    pageprintf("   /btscan        - start scanning for Bluetooth devices (auto-stops after 10s)\n");
     pageprintf("   /btpair addr   - pair with device at address (e.g., 00:11:22:33:44:55)\n");
     pageprintf("   /btunpair addr - unpair device at address\n");
     pageprintf("   /btconnect addr- connect to A2DP device at address\n");
@@ -862,15 +861,75 @@ static bool cmdBTScan(const char* arg, const int cmd)
 {
     printf("Starting Bluetooth scan...\n");
     outp(CONTROL_PORT, cmd);
+    
+    // Wait for scan completion (10 seconds) and read results
+    printf("Scanning for Bluetooth devices...\n");
+    
+    // Wait for scan to complete by polling for completion signal
+    uint32_t timeout = 0;
+    uint8_t scan_status = 0;
+    
+    while (timeout < 12000) {  // 12 second timeout (scan takes ~10s)
+        delay(100);  // 100ms delay between polls
+        timeout += 100;
+        
+        // Check if scan is complete
+        outp(CONTROL_PORT, CMD_BT_STATUS);
+        scan_status = inp(DATA_PORT_HIGH);
+        
+        if (scan_status & 0x80) {  // Bit 7 indicates scan complete
+            break;
+        }
+    }
+    
+    if (timeout >= 12000) {
+        printf("Scan timeout - no devices found\n");
+        return true;
+    }
+    
+    // Read device count
+    outp(CONTROL_PORT, CMD_BT_DEVICES);
+    uint8_t device_count = inp(DATA_PORT_HIGH);
+    
+    if (device_count == 0) {
+        printf("No Bluetooth devices found\n");
+        return true;
+    }
+    
+    printf("Found %d Bluetooth device(s):\n", device_count);
+    
+    // Read each device's information
+    for (int i = 0; i < device_count && i < 10; i++) {  // Max 10 devices
+        // Read device address (6 bytes)
+        char address[18];
+        sprintf(address, "%02X:%02X:%02X:%02X:%02X:%02X",
+                inp(DATA_PORT_HIGH), inp(DATA_PORT_HIGH),
+                inp(DATA_PORT_HIGH), inp(DATA_PORT_HIGH),
+                inp(DATA_PORT_HIGH), inp(DATA_PORT_HIGH));
+        
+        // Read device name length
+        uint8_t name_len = inp(DATA_PORT_HIGH);
+        
+        // Read device name
+        char name[33] = {0};
+        if (name_len > 0 && name_len <= 32) {
+            for (int j = 0; j < name_len; j++) {
+                name[j] = inp(DATA_PORT_HIGH);
+            }
+        }
+        
+        // Display device info
+        if (name[0]) {
+            printf("  %d. %s (%s)\n", i + 1, address, name);
+        } else {
+            printf("  %d. %s (Unknown)\n", i + 1, address);
+        }
+    }
+    
     return true;
 }
 
-static bool cmdBTStop(const char* arg, const int cmd)
-{
-    printf("Stopping Bluetooth scan...\n");
-    outp(CONTROL_PORT, cmd);
-    return true;
-}
+
 
 static bool cmdBTPair(const char* arg, const int cmd)
 {
@@ -1002,7 +1061,6 @@ ParseCommand parseCommands[] = {
     {"/psgvol", cmdSetVol, CMD_PSGVOL, ARG_REQUIRE, "100"},
     {"/btinit", cmdBTInit, CMD_BT_INIT, ARG_NONE},
     {"/btscan", cmdBTScan, CMD_BT_SCAN, ARG_NONE},
-    {"/btstop", cmdBTStop, CMD_BT_STOP, ARG_NONE},
     {"/btpair", cmdBTPair, CMD_BT_PAIR, ARG_REQUIRE},
     {"/btunpair", cmdBTUnpair, CMD_BT_UNPAIR, ARG_REQUIRE},
     {"/btconnect", cmdBTConnect, CMD_BT_CONNECT, ARG_REQUIRE},
@@ -1288,10 +1346,30 @@ int main(int argc, char* argv[]) {
     }
 
     int commands = 0;
+    bool bt_only = true;
+    
+    // Check if only Bluetooth commands are used
+    for(int i = 1; i < argc; ++i) {
+        if (argv[i][0] == '/') {
+            if (strncmp(argv[i], "/bt", 3) != 0 && 
+                strcmp(argv[i], "/?") != 0 && 
+                strcmp(argv[i], "/??") != 0) {
+                bt_only = false;
+                break;
+            }
+        }
+    }
+    
+    // Process all commands
     for(int i = 1; i < argc; ++i) {
         if (!parseCommand(argc, argv, &i, parseCommands)) {
             return 1;
         }
+    }
+    
+    // If only Bluetooth commands were used, return early
+    if (bt_only) {
+        return 0;
     }
 
     // If mode was set in commands, apply it
